@@ -14,6 +14,12 @@ export default defineConfig({
         match: ['https://mail.google.com/*'],
         'run-at': 'document-end',
         grant: 'none',
+        homepageURL: 'https://github.com/yuuchilyann/Gmail_HTML_Attachment_Renderer',
+        supportURL: 'https://github.com/yuuchilyann/Gmail_HTML_Attachment_Renderer/issues',
+        downloadURL:
+          'https://raw.githubusercontent.com/yuuchilyann/Gmail_HTML_Attachment_Renderer/main/dist/gmail-html-attachment-renderer.user.js',
+        updateURL:
+          'https://raw.githubusercontent.com/yuuchilyann/Gmail_HTML_Attachment_Renderer/main/dist/gmail-html-attachment-renderer.user.js',
       },
       build: {
         fileName: 'gmail-html-attachment-renderer.user.js',
