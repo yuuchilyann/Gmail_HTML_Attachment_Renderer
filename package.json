@@ -1,0 +1,20 @@
+{
+  "name": "gmail-html-attachment-renderer",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "在 Gmail HTML 附件預覽中渲染內容(Shadow DOM + Trusted Types)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/trusted-types": "^2.0.7",
+    "dompurify": "^3.4.5",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.14",
+    "vite-plugin-monkey": "^8.0.5"
+  }
+}
