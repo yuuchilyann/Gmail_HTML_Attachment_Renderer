@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 const FORBID_TAGS = [
   'script', 'iframe', 'frame', 'frameset', 'object', 'embed',
   'form', 'input', 'button', 'textarea', 'select', 'option',
-  'meta', 'link', 'base', 'applet',
+  'meta', 'link', 'base', 'applet', 'title',
 ];
 
 const FORBID_ATTR = [
@@ -48,5 +48,9 @@ export const sanitize = (rawHtml: string): string =>
     FORBID_TAGS,
     FORBID_ATTR,
     ALLOW_DATA_ATTR: false,
-    WHOLE_DOCUMENT: false,
+    // 保留整份文件:許多 HTML 附件(如電子發票)把 <style> 放在 <head>,
+    // 用 WHOLE_DOCUMENT:false 會讓 DOMPurify 只回傳 <body>,整段 <head><style>
+    // (含表格邊框/字級等規則)被丟棄,渲染後就沒有外框。改 true 保住 <style>。
+    // <head>/<body> 包裹標籤在塞進 .content 的 div 時會被 parser 自動拆掉,只留 <style> 與內容。
+    WHOLE_DOCUMENT: true,
   }) as string;

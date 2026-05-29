@@ -8,7 +8,7 @@ export default defineConfig({
       userscript: {
         name: 'Gmail HTML Attachment Renderer',
         namespace: 'https://github.com/yuuchilyann',
-        version: '0.0.1',
+        version: '0.0.2',
         description: '在 Gmail HTML 附件預覽中渲染內容(Shadow DOM + Trusted Types)',
         author: 'AYUCode',
         match: ['https://mail.google.com/*'],

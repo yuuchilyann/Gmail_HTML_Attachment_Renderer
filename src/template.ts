@@ -25,6 +25,7 @@ export const shadowTemplate = `
   <div class="toolbar">
     <span>已渲染 HTML 附件 · JS 與外連已封鎖</span>
     <button class="toggle">顯示原始碼</button>
+    <button class="copy">複製原始碼</button>
     <button class="images">載入圖片</button>
     <button class="download">下載</button>
   </div>

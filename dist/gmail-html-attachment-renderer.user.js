@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Gmail HTML Attachment Renderer
 // @namespace    https://github.com/yuuchilyann
-// @version      0.0.1
+// @version      0.0.2
 // @author       AYUCode
 // @description  在 Gmail HTML 附件預覽中渲染內容(Shadow DOM + Trusted Types)
 // @homepageURL  https://github.com/yuuchilyann/Gmail_HTML_Attachment_Renderer
@@ -67,7 +67,8 @@
 		"meta",
 		"link",
 		"base",
-		"applet"
+		"applet",
+		"title"
 	];
 	var FORBID_ATTR = [
 		"onerror",
@@ -111,7 +112,7 @@
 		FORBID_TAGS,
 		FORBID_ATTR,
 		ALLOW_DATA_ATTR: false,
-		WHOLE_DOCUMENT: false
+		WHOLE_DOCUMENT: true
 	});
 	var fixCss = (html) => html.replace(/<style\b[^>]*>([\s\S]*?)<\/style>/gi, (match, css) => {
 		const lower = css.replace(/\b([A-Z][A-Z\-]+)(\s*:)/g, (_m, prop, colon) => prop.toLowerCase() + colon);
@@ -147,6 +148,7 @@
   <div class="toolbar">
     <span>已渲染 HTML 附件 · JS 與外連已封鎖</span>
     <button class="toggle">顯示原始碼</button>
+    <button class="copy">複製原始碼</button>
     <button class="images">載入圖片</button>
     <button class="download">下載</button>
   </div>
@@ -182,15 +184,32 @@
 		setHTML(shadow, shadowTemplate);
 		const contentDiv = shadow.querySelector(".content");
 		if (!contentDiv) return;
-		setHTML(contentDiv, fixedHtml);
-		log("Shadow DOM 內容子元素數:", contentDiv.children.length);
+		const contentRoot = contentDiv.attachShadow({ mode: "open" });
 		pre.style.display = "none";
 		pre.parentNode?.insertBefore(host, pre);
+		try {
+			setHTML(contentRoot, fixedHtml);
+			applyBodyStyles(fixedHtml, contentDiv);
+			log("Shadow DOM 內容子元素數:", contentRoot.childElementCount);
+		} catch (e) {
+			log("內容注入失敗", e.message);
+		}
 		const zoom = findZoomControl(pre);
 		setZoomHidden(zoom, true);
 		wireToggle(shadow, pre, contentDiv, zoom, container);
-		wireLoadImages(shadow, contentDiv);
+		wireCopy(shadow, rawHtml);
+		wireLoadImages(shadow, contentRoot);
 		wireDownload(shadow, container, rawHtml);
+	}
+	function applyBodyStyles(html, contentDiv) {
+		const bodyTag = html.match(/<body\b([^>]*)>/i)?.[1] ?? "";
+		if (!bodyTag) return;
+		const styleAttr = bodyTag.match(/style\s*=\s*"([^"]*)"/i)?.[1] ?? bodyTag.match(/style\s*=\s*'([^']*)'/i)?.[1] ?? "";
+		const bgcolorAttr = bodyTag.match(/bgcolor\s*=\s*["']?([^"'\s>]+)/i)?.[1];
+		const bg = styleAttr.match(/background(?:-color)?\s*:\s*([^;]+)/i)?.[1]?.trim() ?? bgcolorAttr;
+		if (bg) contentDiv.style.background = bg;
+		const font = styleAttr.match(/font-family\s*:\s*([^;]+)/i)?.[1]?.trim();
+		if (font) contentDiv.style.fontFamily = font;
 	}
 	function bindHostHeightToContainer(host, container) {
 		host.style.visibility = "hidden";
@@ -250,10 +269,40 @@
 			target.textContent = switchingToSource ? "渲染 HTML" : "顯示原始碼";
 		});
 	}
-	function wireLoadImages(shadow, contentDiv) {
+	function copyText(text) {
+		if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+		return new Promise((resolve, reject) => {
+			const ta = document.createElement("textarea");
+			ta.value = text;
+			ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
+			document.body.appendChild(ta);
+			ta.select();
+			const ok = document.execCommand("copy");
+			document.body.removeChild(ta);
+			ok ? resolve() : reject(new Error("execCommand copy failed"));
+		});
+	}
+	function wireCopy(shadow, rawHtml) {
+		shadow.querySelector(".copy")?.addEventListener("click", (e) => {
+			const target = e.currentTarget;
+			const original = target.textContent;
+			copyText(rawHtml).then(() => {
+				target.textContent = "已複製";
+				log("已複製原始碼,長度", rawHtml.length);
+			}).catch((err) => {
+				target.textContent = "複製失敗";
+				log("複製失敗", err);
+			}).finally(() => {
+				setTimeout(() => {
+					target.textContent = original;
+				}, 1500);
+			});
+		});
+	}
+	function wireLoadImages(shadow, contentRoot) {
 		shadow.querySelector(".images")?.addEventListener("click", (e) => {
 			if (!confirm("載入圖片可能會洩漏 IP 給寄件者(email tracker)。確定載入?")) return;
-			contentDiv.querySelectorAll("img[data-original-src]").forEach((img) => {
+			contentRoot.querySelectorAll("img[data-original-src]").forEach((img) => {
 				const src = img.dataset.originalSrc;
 				if (src) img.setAttribute("src", src);
 				img.removeAttribute("style");

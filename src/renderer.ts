@@ -48,18 +48,55 @@ export function renderTarget({ container, pre, text: rawHtml }: RenderTarget): v
   const contentDiv = shadow.querySelector<HTMLDivElement>('.content');
   if (!contentDiv) return;
 
-  setHTML(contentDiv, fixedHtml);
-  log('Shadow DOM 內容子元素數:', contentDiv.children.length);
+  // 附件內容放進獨立的 inner shadow root:附件自己的 <style> 只作用在這層,
+  // 不會洩漏到外層 toolbar(否則信件裡的 *{}、div{}、body{} 等廣域選擇器會蓋掉工具列)。
+  const contentRoot = contentDiv.attachShadow({ mode: 'open' });
 
+  // 先接上 host、隱藏原始 <pre>,確保 toolbar 一定出現;
+  // 內容注入萬一出錯(try/catch)也不會讓整個渲染與工具列一起消失。
   pre.style.display = 'none';
   pre.parentNode?.insertBefore(host, pre);
+
+  try {
+    setHTML(contentRoot, fixedHtml);
+    applyBodyStyles(fixedHtml, contentDiv);
+    log('Shadow DOM 內容子元素數:', contentRoot.childElementCount);
+  } catch (e) {
+    log('內容注入失敗', (e as Error).message);
+  }
 
   const zoom = findZoomControl(pre);
   setZoomHidden(zoom, true);
 
   wireToggle(shadow, pre, contentDiv, zoom, container);
-  wireLoadImages(shadow, contentDiv);
+  wireCopy(shadow, rawHtml);
+  wireLoadImages(shadow, contentRoot);
   wireDownload(shadow, container, rawHtml);
+}
+
+/**
+ * 注入時 <body> 包裹標籤會被 parser 拆掉,body 上的 bgcolor / font-family 會遺失。
+ * 這裡從 <body> 開頭標籤以純字串解析讀出底色與字體,套到 .content 容器(inner shadow 的 host),
+ * 由內容繼承,還原信件原本外觀(覆蓋 template 的預設 white / 新細明體)。
+ * 刻意不用 DOMParser,避免在 Gmail 的 Trusted Types 環境踩到風險。
+ */
+function applyBodyStyles(html: string, contentDiv: HTMLDivElement): void {
+  const bodyTag = html.match(/<body\b([^>]*)>/i)?.[1] ?? '';
+  if (!bodyTag) return;
+
+  const styleAttr =
+    bodyTag.match(/style\s*=\s*"([^"]*)"/i)?.[1] ??
+    bodyTag.match(/style\s*=\s*'([^']*)'/i)?.[1] ??
+    '';
+  const bgcolorAttr = bodyTag.match(/bgcolor\s*=\s*["']?([^"'\s>]+)/i)?.[1];
+
+  const bg =
+    styleAttr.match(/background(?:-color)?\s*:\s*([^;]+)/i)?.[1]?.trim() ??
+    bgcolorAttr;
+  if (bg) contentDiv.style.background = bg;
+
+  const font = styleAttr.match(/font-family\s*:\s*([^;]+)/i)?.[1]?.trim();
+  if (font) contentDiv.style.fontFamily = font;
 }
 
 /**
@@ -163,11 +200,50 @@ function wireToggle(
   });
 }
 
-function wireLoadImages(shadow: ShadowRoot, contentDiv: HTMLDivElement): void {
+function copyText(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  // 後備:execCommand('copy')。grant:none 下無 GM_setClipboard,但頁面有 https + 點擊手勢。
+  return new Promise<void>((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    ok ? resolve() : reject(new Error('execCommand copy failed'));
+  });
+}
+
+function wireCopy(shadow: ShadowRoot, rawHtml: string): void {
+  const btn = shadow.querySelector<HTMLButtonElement>('.copy');
+  btn?.addEventListener('click', (e) => {
+    const target = e.currentTarget as HTMLButtonElement;
+    const original = target.textContent;
+    copyText(rawHtml)
+      .then(() => {
+        target.textContent = '已複製';
+        log('已複製原始碼,長度', rawHtml.length);
+      })
+      .catch((err) => {
+        target.textContent = '複製失敗';
+        log('複製失敗', err);
+      })
+      .finally(() => {
+        setTimeout(() => {
+          target.textContent = original;
+        }, 1500);
+      });
+  });
+}
+
+function wireLoadImages(shadow: ShadowRoot, contentRoot: ShadowRoot): void {
   const btn = shadow.querySelector<HTMLButtonElement>('.images');
   btn?.addEventListener('click', (e) => {
     if (!confirm('載入圖片可能會洩漏 IP 給寄件者(email tracker)。確定載入?')) return;
-    contentDiv
+    contentRoot
       .querySelectorAll<HTMLImageElement>('img[data-original-src]')
       .forEach((img) => {
         const src = img.dataset.originalSrc;

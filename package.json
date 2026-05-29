@@ -1,6 +1,6 @@
 {
   "name": "gmail-html-attachment-renderer",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "type": "module",
   "description": "在 Gmail HTML 附件預覽中渲染內容(Shadow DOM + Trusted Types)",
